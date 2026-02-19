@@ -1,0 +1,8 @@
+{
+  "name": "Economiza Pay",
+  "description": "A PWA for comparing prices between markets and pharmacies to save consumers time and money.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
