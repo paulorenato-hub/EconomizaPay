@@ -1,32 +1,61 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Store, ShoppingBag, ChevronRight, Search, Tag } from 'lucide-react';
+import { Store, ShoppingBag, ChevronRight, Search, Tag, Loader2, MapPin } from 'lucide-react';
 import { DB } from '../services/db';
 import { Market, Product } from '../types';
+import { calculateDistance } from '../services/geo';
+import { useLocationContext } from '../context/LocationContext';
 
 export const Explore: React.FC = () => {
+  const { location, addressLabel, loading: locationLoading, openLocationModal } = useLocationContext();
   const [activeTab, setActiveTab] = useState<'mercados' | 'produtos'>('mercados');
   const [markets, setMarkets] = useState<Market[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
+      setLoading(true);
+      if (locationLoading) return; // wait for location context to finish its own loading
       try {
-        const [m, p] = await Promise.all([
-          DB.getMarkets(),
-          // Passa 'true' para filtrar apenas produtos ativos
-          DB.getProducts(undefined, undefined, true)
-        ]);
-        setMarkets(m);
-        setProducts(p);
+        const allMarkets = await DB.getMarkets();
+        
+        let localMarketIds: string[] = [];
+        let filteredMarketsList: Market[] = [];
+
+        if (location) {
+          const { lat, lng } = location;
+          const radiusKm = 20;
+          
+          filteredMarketsList = allMarkets.filter(m => {
+            if (!m.latitude || !m.longitude) return false;
+            return calculateDistance(lat, lng, m.latitude, m.longitude) <= radiusKm;
+          });
+          
+          localMarketIds = filteredMarketsList.map(m => m.id);
+        } else {
+          localMarketIds = []; // Show nothing if no location
+        }
+
+        setMarkets(filteredMarketsList);
+
+        if (localMarketIds.length > 0) {
+           const p = await DB.getProductsInMarkets(localMarketIds, undefined, undefined, true);
+           setProducts(p);
+        } else {
+           setProducts([]);
+        }
+
+        setLoading(false);
       } catch (err) {
         console.error("Erro ao carregar dados de exploração:", err);
+        setLoading(false);
       }
     };
     loadData();
-  }, []);
+  }, [location, locationLoading]);
 
   const filteredMarkets = markets.filter(m => m.nome.toLowerCase().includes(searchTerm.toLowerCase()));
   const filteredProducts = products.filter(p => p.nome.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -38,7 +67,16 @@ export const Explore: React.FC = () => {
     <div className="min-h-screen bg-slate-50">
       {/* Header Fixo da Página */}
       <div className="bg-white px-4 pt-6 pb-2 sticky top-0 z-30 shadow-sm md:static md:shadow-none">
-        <h1 className="text-2xl font-extrabold text-gray-900 mb-4">Explorar</h1>
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-extrabold text-gray-900">Explorar</h1>
+          <button 
+                onClick={openLocationModal}
+                className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full active:bg-emerald-100 transition-colors"
+            >
+                <MapPin size={14} />
+                <span className="text-xs font-bold truncate max-w-[120px]">{addressLabel}</span>
+          </button>
+        </div>
         
         {/* Busca */}
         <div className="relative mb-6">
@@ -70,7 +108,14 @@ export const Explore: React.FC = () => {
       </div>
 
       <div className="p-4 max-w-7xl mx-auto">
-        {activeTab === 'mercados' ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-24">
+             <div className="relative">
+                <Loader2 className="animate-spin text-emerald-500" size={40} />
+             </div>
+             <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-4">Localizando Região...</p>
+          </div>
+        ) : activeTab === 'mercados' ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredMarkets.length > 0 ? filteredMarkets.map(market => (
               <Link to={`/market/${market.id}`} key={market.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between group active:scale-[0.98] transition-all">

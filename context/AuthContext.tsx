@@ -11,6 +11,7 @@ interface AuthContextType {
   register: (email: string, pass: string, name: string, phone: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAdmin: boolean;
+  onlineCount: number;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [onlineCount, setOnlineCount] = useState(1);
 
   // Auth Session Logic
   useEffect(() => {
@@ -55,15 +57,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             },
         });
 
-        channel.subscribe(async (status) => {
-            if (status === 'SUBSCRIBED') {
-                await channel.track({
-                    online_at: new Date().toISOString(),
-                    user_id: user.id,
-                    name: user.nome
-                });
-            }
-        });
+        channel
+            .on('presence', { event: 'sync' }, () => {
+                const state = channel?.presenceState() || {};
+                const count = Object.keys(state).length;
+                setOnlineCount(count > 0 ? count : 1);
+            })
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await channel?.track({
+                        online_at: new Date().toISOString(),
+                        user_id: user.id,
+                        name: user.nome
+                    });
+                }
+            });
     }
 
     return () => {
@@ -137,7 +145,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       login, 
       register,
       logout, 
-      isAdmin: user?.perfil === 'ADMIN' 
+      isAdmin: user?.perfil === 'ADMIN',
+      onlineCount 
     }}>
       {children}
     </AuthContext.Provider>

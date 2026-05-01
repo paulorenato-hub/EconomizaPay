@@ -4,65 +4,50 @@ import { Link } from 'react-router-dom';
 import { Search, MapPin, TrendingDown, Loader2, Navigation } from 'lucide-react';
 import { DB } from '../services/db';
 import { Product, Market } from '../types';
-import { getAddressFromCoords, calculateDistance } from '../services/geo';
+import { calculateDistance } from '../services/geo';
+import { useLocationContext } from '../context/LocationContext';
 
 export const Home: React.FC = () => {
+  const { location: userLocation, addressLabel, openLocationModal } = useLocationContext();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [categories, setCategories] = useState<string[]>(['Todas']);
   const [lowestPrices, setLowestPrices] = useState<Record<string, number | null>>({});
-  
-  // Estados de Localização
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [addressLabel, setAddressLabel] = useState('Detectando...');
-
-  const requestLocation = () => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          setUserLocation({ lat: latitude, lng: longitude });
-          try {
-            const label = await getAddressFromCoords(latitude, longitude);
-            setAddressLabel(label);
-          } catch (e) {
-            // Em caso de erro na API de endereço, usa um termo genérico
-            setAddressLabel("Localização Atual");
-          }
-        },
-        (error) => {
-          // Log descritivo em vez de objeto vazio
-          const errorMsg = error.message || "Motivo desconhecido";
-          console.warn(`Geolocalização indisponível: ${errorMsg} (Code: ${error.code})`);
-          
-          // Fallback para uma cidade padrão em caso de erro
-          setAddressLabel("São Paulo");
-        },
-        { 
-            enableHighAccuracy: false, // IMPORTANTE: false evita timeouts e erros de sinal GPS fraco
-            timeout: 15000,            // Espera até 15 segundos
-            maximumAge: 600000         // Aceita localização em cache de até 10 minutos
-        }
-      );
-    } else {
-        setAddressLabel("Brasil");
-    }
-  };
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Passa 'true' para filtrar apenas produtos ativos
-      const allProducts = await DB.getProducts(searchTerm, selectedCategory, true);
+      
+      const allMarkets = await DB.getMarkets();
+      let localMarketIds: string[] = [];
+
+      if (userLocation) {
+         const radiusKm = 20;
+         const localMarkets = allMarkets.filter(m => {
+            if (!m.latitude || !m.longitude) return false;
+            return calculateDistance(userLocation.lat, userLocation.lng, m.latitude, m.longitude) <= radiusKm;
+         });
+         localMarketIds = localMarkets.map(m => m.id);
+      } else {
+         localMarketIds = []; // Don't show anything unless we have a location
+      }
+
+      if (localMarketIds.length === 0) {
+        setProducts([]);
+        setLoading(false);
+        return;
+      }
+
+      const allProducts = await DB.getProductsInMarkets(localMarketIds, searchTerm, selectedCategory, true);
       setProducts(allProducts);
       
       const cats = Array.from(new Set(allProducts.map(p => p.categoria)));
       if (categories.length <= 1) setCategories(['Todas', ...cats]);
 
       const pricePromises = allProducts.map(async (p) => {
-        const price = await DB.getLowestPriceForProduct(p.id);
+        const price = await DB.getLowestPriceForProductInMarkets(p.id, localMarketIds);
         return { id: p.id, price };
       });
       
@@ -79,22 +64,18 @@ export const Home: React.FC = () => {
   };
 
   useEffect(() => {
-    requestLocation();
-  }, []);
-
-  useEffect(() => {
     const timer = setTimeout(() => {
       fetchData();
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchTerm, selectedCategory]);
+  }, [searchTerm, selectedCategory, userLocation]);
 
   return (
     <div className="min-h-screen">
       <div className="bg-white px-4 pt-6 pb-4 shadow-sm border-b border-gray-100 rounded-b-[2rem] md:rounded-none">
         <div className="flex items-center justify-between mb-4">
             <button 
-                onClick={requestLocation}
+                onClick={openLocationModal}
                 className="text-left active:scale-95 transition-transform"
             >
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Você está em</p>
@@ -104,9 +85,12 @@ export const Home: React.FC = () => {
                 </div>
             </button>
             <div className="flex gap-2">
-                <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600">
+                <button 
+                  onClick={openLocationModal} 
+                  className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 active:bg-emerald-100 transition-colors"
+                >
                     <Navigation size={18} />
-                </div>
+                </button>
             </div>
         </div>
 

@@ -18,6 +18,32 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
  * Busca o nome da cidade usando a API do OpenStreetMap (Nominatim)
  * Inclui parâmetros recomendados para evitar bloqueios de rede.
  */
+export const getCoordsFromAddress = async (bairro: string, cidade: string): Promise<{ lat: number; lon: number } | null> => {
+  try {
+    const query = `${bairro}, ${cidade}`;
+    const email = 'contato@economizapay.com.br';
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&email=${email}&limit=1`,
+      {
+        headers: {
+          'Accept-Language': 'pt-BR'
+        },
+        mode: 'cors'
+      }
+    );
+
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (data && data.length > 0) {
+      return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+    }
+    return null;
+  } catch (err) {
+    return null;
+  }
+};
+
 export const getAddressFromCoords = async (lat: number, lon: number): Promise<string> => {
   try {
     // Nominatim recomenda o uso de um email para identificação e evitar rate-limiting severo

@@ -5,10 +5,11 @@ import { ShoppingBag, Store, Tag, TrendingUp, Users, ArrowUpRight, ArrowDownRigh
 import { DB } from '../../services/db';
 import { supabase } from '../../services/supabase';
 import { ScanSubmission } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 
 export const Dashboard: React.FC = () => {
+  const { onlineCount } = useAuth();
   const [stats, setStats] = useState({ products: 0, markets: 0, prices: 0, users: 0 });
-  const [onlineUsers, setOnlineUsers] = useState<number>(1);
   const [pendingScans, setPendingScans] = useState<ScanSubmission[]>([]);
   const [loadingScans, setLoadingScans] = useState(false);
 
@@ -21,24 +22,6 @@ export const Dashboard: React.FC = () => {
       console.error("Erro ao carregar estatísticas reais:", err);
     }
   };
-
-  // 2. Configura listener para Usuários Online (Presence)
-  useEffect(() => {
-    const channel = supabase.channel('system-global');
-
-    channel
-        .on('presence', { event: 'sync' }, () => {
-            const state = channel.presenceState();
-            const count = Object.keys(state).length;
-            // Garante que mostra pelo menos 1 (eu mesmo)
-            setOnlineUsers(count > 0 ? count : 1);
-        })
-        .subscribe();
-
-    return () => {
-        supabase.removeChannel(channel);
-    };
-  }, []);
 
   const loadScans = async () => {
     if (pendingScans.length === 0) setLoadingScans(true);
@@ -134,7 +117,7 @@ export const Dashboard: React.FC = () => {
         />
         <StatCard 
           title="Usuários Online" 
-          value={onlineUsers} 
+          value={onlineCount} 
           icon={Users} 
           color="bg-green-500" 
           trend="up"

@@ -4,8 +4,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, Share2, AlertCircle, Loader2 } from 'lucide-react';
 import { DB } from '../services/db';
 import { Product, PriceComparison } from '../types';
+import { calculateDistance } from '../services/geo';
+import { useLocationContext } from '../context/LocationContext';
 
 export const ProductDetails: React.FC = () => {
+  const { location, loading: locationLoading } = useLocationContext();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
@@ -14,30 +17,30 @@ export const ProductDetails: React.FC = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      if (!id) return;
+      if (!id || locationLoading) return;
       try {
         setLoading(true);
-        // Busca apenas produtos ativos. Se estiver inativo, não retorna na lista filtrada.
         const products = await DB.getProducts(undefined, undefined, true);
         const foundProduct = products.find(p => p.id === id);
         setProduct(foundProduct || null);
 
         if (foundProduct) {
-          const prices = await DB.getPrices(id);
+          let prices = await DB.getPrices(id);
           const markets = await DB.getMarkets();
           
-          if (prices.length > 0) {
-            const minPrice = Math.min(...prices.map(p => p.valor));
-            const comps: PriceComparison[] = prices.map(price => {
-              const market = markets.find(m => m.id === price.mercado_id);
-              return {
-                marketName: market ? market.nome : 'Mercado Desconhecido',
-                price: price.valor,
-                lastUpdate: price.data_atualizacao,
-                isLowest: price.valor === minPrice && minPrice > 0
-              };
-            }).sort((a, b) => a.price - b.price);
-            setComparisons(comps);
+          if (location) {
+             const { lat, lng } = location;
+             const radiusKm = 20;
+             const localMarketIds = markets.filter(m => {
+               if (!m.latitude || !m.longitude) return false;
+               return calculateDistance(lat, lng, m.latitude, m.longitude) <= radiusKm;
+             }).map(m => m.id);
+             
+             prices = prices.filter(p => localMarketIds.includes(p.mercado_id));
+             processPrices(prices, markets);
+          } else {
+             // No location = no prices from valid region.
+             processPrices([], markets);
           }
         }
       } catch (err) {
@@ -47,7 +50,25 @@ export const ProductDetails: React.FC = () => {
       }
     };
     loadData();
-  }, [id]);
+  }, [id, location, locationLoading]);
+
+  const processPrices = (prices: any[], markets: any[]) => {
+      if (prices.length > 0) {
+        const minPrice = Math.min(...prices.map(p => p.valor));
+        const comps: PriceComparison[] = prices.map(price => {
+          const market = markets.find(m => m.id === price.mercado_id);
+          return {
+            marketName: market ? market.nome : 'Mercado Desconhecido',
+            price: price.valor,
+            lastUpdate: price.data_atualizacao,
+            isLowest: price.valor === minPrice && minPrice > 0
+          };
+        }).sort((a, b) => a.price - b.price);
+        setComparisons(comps);
+      } else {
+        setComparisons([]);
+      }
+  };
 
   if (loading) {
     return (

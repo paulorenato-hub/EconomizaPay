@@ -9,8 +9,17 @@ export interface User {
   perfil: UserProfile;
 }
 
-export interface Market {
+export interface UserAddress {
   id: string;
+  user_id: string;
+  titulo: string;
+  bairro: string;
+  cidade: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface Market {
   nome: string;
   ativo: boolean;
   data_criacao: string;

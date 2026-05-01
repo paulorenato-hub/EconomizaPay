@@ -100,12 +100,16 @@ const AppContent: React.FC = () => {
   );
 };
 
+import { LocationProvider } from './context/LocationContext';
+
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <HashRouter>
-        <AppContent />
-      </HashRouter>
+      <LocationProvider>
+        <HashRouter>
+          <AppContent />
+        </HashRouter>
+      </LocationProvider>
     </AuthProvider>
   );
 };

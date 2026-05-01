@@ -3,6 +3,40 @@ import { Market, Product, Price, ScanSubmission } from '../types';
 import { supabase } from './supabase';
 
 export const DB = {
+  getUserAddresses: async (userId: string): Promise<any[]> => {
+    try {
+      const stored = localStorage.getItem(`user_addresses_${userId}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  saveUserAddress: async (address: any) => {
+    try {
+      const storageKey = `user_addresses_${address.user_id}`;
+      const stored = localStorage.getItem(storageKey);
+      let addresses = stored ? JSON.parse(stored) : [];
+      addresses.push({ ...address, id: `addr_${Date.now()}` });
+      localStorage.setItem(storageKey, JSON.stringify(addresses));
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  deleteUserAddress: async (userId: string, addressId: string) => {
+    try {
+      const storageKey = `user_addresses_${userId}`;
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        let addresses = JSON.parse(stored);
+        addresses = addresses.filter((a: any) => a.id !== addressId);
+        localStorage.setItem(storageKey, JSON.stringify(addresses));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  },
   getMarkets: async (): Promise<Market[]> => {
     const { data, error } = await supabase
       .from('markets')
@@ -10,6 +44,39 @@ export const DB = {
       .eq('ativo', true)
       .order('nome');
     
+    if (error) throw error;
+    return data || [];
+  },
+
+  getProductsInMarkets: async (marketIds: string[], searchTerm?: string, category?: string, onlyActive: boolean = false): Promise<Product[]> => {
+    if (marketIds.length === 0) return [];
+
+    const { data: prices, error: priceError } = await supabase
+      .from('prices')
+      .select('produto_id')
+      .in('mercado_id', marketIds)
+      .eq('ativo', true);
+
+    if (priceError) throw priceError;
+    if (!prices || prices.length === 0) return [];
+
+    const productIds = Array.from(new Set(prices.map(p => p.produto_id)));
+
+    let query = supabase.from('products').select('*').in('id', productIds);
+    
+    if (onlyActive) {
+      query = query.eq('ativo', true);
+    }
+    
+    if (searchTerm) {
+      query = query.ilike('nome', `%${searchTerm}%`);
+    }
+    
+    if (category && category !== 'Todas') {
+      query = query.eq('categoria', category);
+    }
+    
+    const { data, error } = await query.order('nome');
     if (error) throw error;
     return data || [];
   },
@@ -159,6 +226,22 @@ export const DB = {
       .from('prices')
       .select('valor')
       .eq('produto_id', productId)
+      .eq('ativo', true)
+      .order('valor', { ascending: true })
+      .limit(1)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data ? data.valor : null;
+  },
+
+  getLowestPriceForProductInMarkets: async (productId: string, marketIds: string[]): Promise<number | null> => {
+    if (marketIds.length === 0) return null;
+    const { data, error } = await supabase
+      .from('prices')
+      .select('valor')
+      .eq('produto_id', productId)
+      .in('mercado_id', marketIds)
       .eq('ativo', true)
       .order('valor', { ascending: true })
       .limit(1)

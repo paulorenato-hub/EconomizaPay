@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { DB } from '../services/db';
+import { getCoordsFromAddress } from '../services/geo';
 import { 
   Settings, 
   History, 
@@ -17,7 +19,9 @@ import {
   Scan,
   Phone,
   LayoutDashboard,
-  ShieldAlert
+  MapPin,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 
 export const Profile: React.FC = () => {
@@ -25,13 +29,35 @@ export const Profile: React.FC = () => {
   const navigate = useNavigate();
   
   const [isEditing, setIsEditing] = useState(false);
+  const [showAddresses, setShowAddresses] = useState(false);
+  const [showAddressForm, setShowAddressForm] = useState(false);
+  
   const [showHelp, setShowHelp] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  
   const [editData, setEditData] = useState({ 
     nome: user?.nome || '', 
     email: user?.email || '', 
     telefone: user?.telefone || '' 
   });
+
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [addressForm, setAddressForm] = useState({ titulo: '', bairro: '', cidade: '' });
+  const [loadingAddress, setLoadingAddress] = useState(false);
+  const [addressError, setAddressError] = useState('');
+
+  useEffect(() => {
+    if (showAddresses && user) {
+      loadAddresses();
+    }
+  }, [showAddresses, user]);
+
+  const loadAddresses = async () => {
+    if (user) {
+        const data = await DB.getUserAddresses(user.id);
+        setAddresses(data);
+    }
+  };
 
   if (!user) {
     navigate('/login');
@@ -46,6 +72,42 @@ export const Profile: React.FC = () => {
   const handleSaveProfile = () => {
     // Aqui seria a chamada ao Supabase para atualizar
     setIsEditing(false);
+  };
+
+  const handleSaveAddress = async () => {
+    setLoadingAddress(true);
+    setAddressError('');
+    
+    if (!addressForm.titulo || !addressForm.bairro || !addressForm.cidade) {
+      setAddressError('Preencha todos os campos.');
+      setLoadingAddress(false);
+      return;
+    }
+
+    const coords = await getCoordsFromAddress(addressForm.bairro, addressForm.cidade);
+    
+    if (coords) {
+      await DB.saveUserAddress({
+        user_id: user.id,
+        titulo: addressForm.titulo,
+        bairro: addressForm.bairro,
+        cidade: addressForm.cidade,
+        latitude: coords.lat,
+        longitude: coords.lon
+      });
+      setShowAddressForm(false);
+      setAddressForm({ titulo: '', bairro: '', cidade: '' });
+      loadAddresses();
+    } else {
+      setAddressError('Endereço não encontrado. Verifique se os dados estão corretos.');
+    }
+    
+    setLoadingAddress(false);
+  };
+
+  const handleDeleteAddress = async (id: string) => {
+    await DB.deleteUserAddress(user.id, id);
+    loadAddresses();
   };
 
   const faqs = [
@@ -188,6 +250,94 @@ export const Profile: React.FC = () => {
                 </button>
             </div>
           </div>
+        ) : showAddresses ? (
+          <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-emerald-100 animate-in fade-in slide-in-from-top-4">
+             <div className="flex justify-between items-center mb-6">
+                 <h3 className="font-black text-gray-800 uppercase text-xs tracking-widest">Meus Endereços</h3>
+                 <button onClick={() => setShowAddresses(false)} className="text-gray-400"><X size={20}/></button>
+             </div>
+
+             {showAddressForm ? (
+                <div className="space-y-4 animate-in fade-in zoom-in-95">
+                    <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Título (ex: Casa, Trabalho)</label>
+                        <input 
+                            className="w-full mt-1 bg-gray-50 border-none rounded-2xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-emerald-500/20" 
+                            value={addressForm.titulo}
+                            onChange={e => setAddressForm({...addressForm, titulo: e.target.value})}
+                            placeholder="Casa, Trabalho..."
+                        />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Bairro</label>
+                        <input 
+                            className="w-full mt-1 bg-gray-50 border-none rounded-2xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-emerald-500/20" 
+                            value={addressForm.bairro}
+                            onChange={e => setAddressForm({...addressForm, bairro: e.target.value})}
+                            placeholder="Centro"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Cidade</label>
+                        <input 
+                            className="w-full mt-1 bg-gray-50 border-none rounded-2xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-emerald-500/20" 
+                            value={addressForm.cidade}
+                            onChange={e => setAddressForm({...addressForm, cidade: e.target.value})}
+                            placeholder="São Paulo"
+                        />
+                    </div>
+                    
+                    {addressError && (
+                        <p className="text-xs text-red-500 font-bold bg-red-50 p-2 rounded-lg text-center">
+                           {addressError}
+                        </p>
+                    )}
+
+                    <div className="flex gap-3 pt-2">
+                         <button 
+                             onClick={() => setShowAddressForm(false)}
+                             className="flex-1 py-3 text-xs font-bold text-gray-500 bg-gray-100 rounded-2xl uppercase"
+                         >
+                            Cancelar
+                         </button>
+                         <button 
+                             onClick={handleSaveAddress}
+                             disabled={loadingAddress}
+                             className="flex-[2] py-3 text-xs font-black text-white bg-emerald-600 rounded-2xl uppercase flex items-center justify-center shadow-lg shadow-emerald-200"
+                         >
+                            {loadingAddress ? <Loader2 className="animate-spin" size={16}/> : 'Salvar Endereço'}
+                         </button>
+                    </div>
+                </div>
+             ) : (
+                <div className="space-y-4">
+                  {addresses.length === 0 ? (
+                      <div className="text-center py-6">
+                           <p className="text-sm font-bold text-gray-400">Nenhum endereço cadastrado</p>
+                      </div>
+                  ) : (
+                      addresses.map(addr => (
+                         <div key={addr.id} className="flex items-center justify-between p-4 border border-gray-100 rounded-2xl bg-gray-50">
+                             <div>
+                                 <p className="font-bold text-sm text-gray-800">{addr.titulo}</p>
+                                 <p className="text-[11px] font-medium text-gray-500 mt-0.5">{addr.bairro} - {addr.cidade}</p>
+                             </div>
+                             <button onClick={() => handleDeleteAddress(addr.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors">
+                                 <Trash2 size={18} />
+                             </button>
+                         </div>
+                      ))
+                  )}
+                  
+                  <button 
+                     onClick={() => setShowAddressForm(true)}
+                     className="w-full py-4 border-2 border-dashed border-emerald-200 text-emerald-600 font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-emerald-50 transition-colors uppercase text-xs"
+                  >
+                     <PlusCircle size={18} /> Adicionar Novo
+                  </button>
+                </div>
+             )}
+          </div>
         ) : (
           <section>
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 ml-4">Preferências</h3>
@@ -198,6 +348,13 @@ export const Profile: React.FC = () => {
                 sublabel="Nome e Telefone" 
                 color="text-indigo-500"
                 onClick={() => setIsEditing(true)} 
+              />
+              <MenuButton 
+                icon={MapPin} 
+                label="Endereços" 
+                sublabel="Meus locais cadastrados" 
+                color="text-cyan-500"
+                onClick={() => setShowAddresses(true)}
               />
               <MenuButton 
                 icon={History} 
