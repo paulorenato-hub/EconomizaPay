@@ -143,20 +143,7 @@ export const Profile: React.FC = () => {
         <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-20 -mt-20 blur-3xl"></div>
         
         <div className="relative flex flex-col items-center">
-          <div className="relative mb-4">
-            <div className="w-28 h-28 rounded-[2.5rem] bg-white p-1.5 shadow-2xl shadow-emerald-900/40">
-              <img 
-                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.nome}`} 
-                alt="Avatar" 
-                className="w-full h-full rounded-[2rem] object-cover bg-emerald-50"
-              />
-            </div>
-            <button className="absolute bottom-0 right-0 w-9 h-9 bg-emerald-500 text-white rounded-2xl border-4 border-emerald-600 flex items-center justify-center shadow-lg active:scale-90 transition-transform">
-               <PlusCircle size={18} />
-            </button>
-          </div>
-          
-          <h1 className="text-2xl font-black text-white capitalize tracking-tight">{user.nome}</h1>
+          <h1 className="text-2xl font-black text-white capitalize tracking-tight mt-4">{user.nome}</h1>
           <div className="flex items-center gap-2 mt-1">
              <span className="px-2 py-0.5 bg-emerald-500/30 text-emerald-50 text-[10px] font-bold rounded-full border border-emerald-400/30">
                {isAdmin ? 'Administrador' : 'Membro Premium'}

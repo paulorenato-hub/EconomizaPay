@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Edit, Trash2, Camera, X, Search, Filter, Save, Check, Loader2, Store, DollarSign, Upload, Image as ImageIcon, Power } from 'lucide-react';
+import { Plus, Edit, Trash2, Camera, X, Search, Filter, Save, Check, Loader2, Store, DollarSign, Upload, Image as ImageIcon, Power, AlertTriangle } from 'lucide-react';
 import { DB } from '../../services/db';
 import { Product, Market, Price } from '../../types';
 
@@ -17,6 +17,9 @@ export const ManageProducts: React.FC = () => {
   // Price Prompt State
   const [pricePromptProduct, setPricePromptProduct] = useState<Product | null>(null);
   const [marketPrices, setMarketPrices] = useState<Record<string, string>>({});
+
+  // Delete Prompt State
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   // Form State
   const [editId, setEditId] = useState<string | null>(null);
@@ -184,20 +187,25 @@ export const ManageProducts: React.FC = () => {
       return;
     }
 
-    if (confirm(`Tem certeza que deseja excluir "${product.nome}" permanentemente?\n\nIsso apagará o produto e todo o seu histórico de preços.`)) {
-      try {
-        setLoading(true);
-        // Primeiro limpa os preços para evitar erro de Foreign Key
-        await DB.deletePricesFromProduct(product.id);
-        // Depois exclui o produto
-        await DB.deleteProduct(product.id);
-        await loadData();
-      } catch (err: any) {
-        console.error("Erro ao deletar produto:", err);
-        alert("Erro ao excluir. Tente novamente.");
-      } finally {
-        setLoading(false);
-      }
+    setProductToDelete(product);
+  };
+
+  const confirmDelete = async () => {
+    if (!productToDelete) return;
+    
+    try {
+      setLoading(true);
+      // Primeiro limpa os preços para evitar erro de Foreign Key
+      await DB.deletePricesFromProduct(productToDelete.id);
+      // Depois exclui o produto
+      await DB.deleteProduct(productToDelete.id);
+      await loadData();
+    } catch (err: any) {
+      console.error("Erro ao deletar produto:", err);
+      alert("Erro ao excluir. Tente novamente.");
+    } finally {
+      setLoading(false);
+      setProductToDelete(null);
     }
   };
 
@@ -523,6 +531,48 @@ export const ManageProducts: React.FC = () => {
                         className="flex-1 py-5 px-6 bg-emerald-600 text-white rounded-3xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-emerald-700 shadow-2xl shadow-emerald-200 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                         {loading ? <Loader2 className="animate-spin" size={20} /> : <><DollarSign size={20} /> Salvar Preços</>}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xl animate-in fade-in duration-300" onClick={() => setProductToDelete(null)}></div>
+
+            <div className="relative bg-white rounded-[3rem] w-full max-w-md overflow-hidden shadow-[0_32px_64px_rgba(0,0,0,0.2)] animate-in zoom-in-95 duration-300">
+                <div className="p-10">
+                    <div className="flex flex-col items-center text-center">
+                        <div className="w-20 h-20 bg-red-50 text-red-500 rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-red-900/5">
+                            <AlertTriangle size={40} strokeWidth={2.5} />
+                        </div>
+                        <h2 className="text-2xl font-black text-gray-900 tracking-tight leading-tight">
+                            Excluir Produto
+                        </h2>
+                        <p className="text-gray-500 font-medium mt-3 leading-relaxed">
+                            Tem certeza que deseja excluir <strong className="text-gray-900">"{productToDelete.nome}"</strong> permanentemente?
+                        </p>
+                        <p className="text-xs text-red-500 mt-4 p-3 bg-red-50 rounded-2xl font-bold uppercase tracking-widest leading-relaxed">
+                            Isso apagará o produto e todo o seu histórico de preços.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="bg-slate-50 p-6 flex gap-4">
+                    <button 
+                        onClick={() => setProductToDelete(null)} 
+                        className="flex-1 py-4 px-4 bg-white border border-slate-200 rounded-3xl text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:bg-white hover:text-slate-600 transition-all"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={confirmDelete}
+                        disabled={loading}
+                        className="flex-1 py-4 px-4 bg-red-500 text-white rounded-3xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-600 shadow-xl shadow-red-200 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {loading ? <Loader2 className="animate-spin" size={16} /> : <><Trash2 size={16} /> Excluir</>}
                     </button>
                 </div>
             </div>
